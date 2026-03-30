@@ -169,7 +169,7 @@ with col2:
     st.markdown("""
     <div style='text-align: center; padding: 30px 0;'>
         <h1 style='color: #FF6B6B; margin-bottom: 5px;'>❤️ Heart Disease Predictor</h1>
-        <p style='color: #888; font-size: 16px;'>AI-Powered Medical Risk Assessment</p>
+        <p style='color: #888; font-size: 16px;'>Medical Risk Assessment</p>
     </div>
     """, unsafe_allow_html=True)
 
