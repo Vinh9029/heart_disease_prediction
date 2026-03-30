@@ -19,6 +19,12 @@ import plotly.express as px
 from pathlib import Path
 import os
 from datetime import datetime
+from supabase_client import (
+    save_prediction_to_supabase,
+    load_prediction_history,
+    delete_all_history,
+    get_history_stats
+)
 
 # ═══════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -105,56 +111,13 @@ def load_model():
     return None, False
 
 # ═══════════════════════════════════════════════════════════════════
-# HISTORY SAVING FUNCTIONS
+# NOTE: Database functions moved to supabase_client.py
+# Imports:
+# - save_prediction_to_supabase()
+# - load_prediction_history()
+# - delete_all_history()
+# - get_history_stats()
 # ═══════════════════════════════════════════════════════════════════
-
-def ensure_data_directory():
-    """Ensure data directory exists"""
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-    return data_dir
-
-def save_prediction_to_history(patient_data, prediction, probability):
-    """Save prediction to history CSV file"""
-    try:
-        data_dir = ensure_data_directory()
-        history_file = data_dir / "save_history.csv"
-        
-        # Prepare history record
-        history_record = {
-            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'Prediction': 'HIGH RISK' if prediction == 1 else 'LOW RISK',
-            'Risk_Score': f"{probability*100:.1f}%",
-            **patient_data
-        }
-        
-        # Load existing history or create new
-        if history_file.exists():
-            history_df = pd.read_csv(history_file)
-            history_df = pd.concat([history_df, pd.DataFrame([history_record])], ignore_index=True)
-        else:
-            history_df = pd.DataFrame([history_record])
-        
-        # Save to CSV
-        history_df.to_csv(history_file, index=False)
-        return True
-    except Exception as e:
-        st.error(f"Error saving history: {str(e)}")
-        return False
-
-def load_prediction_history():
-    """Load prediction history from CSV"""
-    try:
-        data_dir = Path("data")
-        history_file = data_dir / "save_history.csv"
-        
-        if history_file.exists():
-            return pd.read_csv(history_file)
-        else:
-            return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Error loading history: {str(e)}")
-        return pd.DataFrame()
 
 # ═══════════════════════════════════════════════════════════════════
 # MAIN APP
@@ -449,11 +412,11 @@ if page == "🔮 Predict":
                 
                 st.dataframe(summary_df, use_container_width=True, hide_index=True)
                 
-                # Auto-save to history
+                # Auto-save to Supabase
                 st.markdown("---")
-                if save_prediction_to_history(patient_data, prediction, probability):
-                    st.success("✅ Prediction automatically saved to history!")
-                    st.info("📁 History saved to: data/save_history.csv")
+                if save_prediction_to_supabase(patient_data, prediction, probability):
+                    st.success("✅ Prediction automatically saved to database!")
+                    st.info("🗄️ Saved to Supabase - View in History page")
                 else:
                     st.error("❌ Failed to save prediction")
                 
@@ -595,17 +558,11 @@ elif page == "📜 History":
     
     with col_h3:
         if st.button("🗑️ Clear History", use_container_width=True):
-            try:
-                data_dir = Path("data")
-                history_file = data_dir / "save_history.csv"
-                if history_file.exists():
-                    history_file.unlink()
-                    st.success("✅ History cleared!")
-                    st.rerun()
-                else:
-                    st.info("No history file to clear")
-            except Exception as e:
-                st.error(f"Error clearing history: {str(e)}")
+            if delete_all_history():
+                st.success("✅ All history cleared from database!")
+                st.rerun()
+            else:
+                st.error("❌ Error clearing history")
     
     st.markdown("---")
     
@@ -622,11 +579,11 @@ elif page == "📜 History":
             st.metric("Total Predictions", len(history_df))
         
         with col_s2:
-            high_risk_count = (history_df['Prediction'] == 'HIGH RISK').sum()
+            high_risk_count = (history_df['prediction'] == 'HIGH RISK').sum()
             st.metric("High Risk", high_risk_count)
         
         with col_s3:
-            low_risk_count = (history_df['Prediction'] == 'LOW RISK').sum()
+            low_risk_count = (history_df['prediction'] == 'LOW RISK').sum()
             st.metric("Low Risk", low_risk_count)
         
         with col_s4:
@@ -648,7 +605,7 @@ elif page == "📜 History":
         
         with col_chart1:
             # Pie chart
-            risk_counts = history_df['Prediction'].value_counts()
+            risk_counts = history_df['prediction'].value_counts()
             if len(risk_counts) > 0:
                 fig_pie = go.Figure(data=[go.Pie(
                     labels=risk_counts.index,
@@ -667,15 +624,15 @@ elif page == "📜 History":
         with col_chart2:
             # Risk score timeline chart
             try:
-                history_df['Timestamp'] = pd.to_datetime(history_df['Timestamp'])
-                history_df_sorted = history_df.sort_values('Timestamp')
+                history_df['timestamp'] = pd.to_datetime(history_df['timestamp'])
+                history_df_sorted = history_df.sort_values('timestamp')
                 
                 # Extract numeric risk score
-                history_df_sorted['Risk_Score_Numeric'] = history_df_sorted['Risk_Score'].str.rstrip('%').astype(float)
+                history_df_sorted['Risk_Score_Numeric'] = history_df_sorted['risk_score'].str.rstrip('%').astype(float)
                 
                 fig_line = go.Figure()
                 fig_line.add_trace(go.Scatter(
-                    x=history_df_sorted['Timestamp'],
+                    x=history_df_sorted['timestamp'],
                     y=history_df_sorted['Risk_Score_Numeric'],
                     mode='lines+markers',
                     name='Risk Score',

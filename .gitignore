@@ -1,2 +1,22 @@
 new/
 .venv/
+venv/
+env/
+
+# SECRETS - NEVER COMMIT!
+.streamlit/secrets.toml
+.env
+.env.local
+
+# Data files
+*.csv
+data/save_history.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
